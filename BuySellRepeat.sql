@@ -12,15 +12,15 @@ CREATE TABLE Retailer(
 
 --created
 CREATE TABLE Lot(
-    Lot_ID NUMBER (15) NOT NULL,
-    Retailer_EIK VARCHAR(100) UNIQUE NOT NULL,
+    Lot_ID NUMBER(15) NOT NULL,
+    Retailer_EIK VARCHAR(100) NOT NULL,
     Balance NUMBER(15) NOT NULL,
     Date_Open DATE NOT NULL,
-    CONSTRAINT Lot_PK PRIMARY KEY(Lot_ID),
+    CONSTRAINT Lot_PK PRIMARY KEY(Retailer_EIK, Date_Open),
     CONSTRAINT Lot_FK FOREIGN KEY(Retailer_EIK) REFERENCES Retailer (Retailer_EIK )
 );
 
---created
+--created 
 CREATE TABLE Retailer_Type(
     Type_ID NUMBER(15) NOT NULL,
     Retailer_Type VARCHAR(25) UNIQUE NOT NULL,
@@ -50,6 +50,7 @@ CREATE TABLE MaliciousRetailer(
     CONSTRAINT MaliciousRetailer_FK FOREIGN KEY (Retailer_EIK) REFERENCES Retailer (Retailer_EIK)
 );
 
+--created
 CREATE TABLE Unsuccessful_Sale(
     Sale_ID NUMBER(15) NOT NULL,
     Retailer_EIK VARCHAR(100) UNIQUE NOT NULL,
@@ -60,12 +61,54 @@ CREATE TABLE Unsuccessful_Sale(
     CONSTRAINT UnsuccessfulSale_FK2 FOREIGN KEY (Item_ID) REFERENCES Inventory (Item_ID)
 );
 
-CREATE TABLE SuccessfulSale(
+--created
+CREATE TABLE Successful_Sale(
     Sale_ID NUMBER(15) NOT NULL,
     Retailer_EIK VARCHAR(100) UNIQUE NOT NULL,
     Item_ID NUMBER(15) UNIQUE NOT NULL,
     Quantity NUMBER(10) UNIQUE NOT NULL,
     CONSTRAINT Sale_PK PRIMARY KEY (Sale_ID),
-    CONSTRAINT Sale_FK1 FOREIGN KEY (Retailer_EIK) REFERENCES Retailer_EIK(Retailer),
+    CONSTRAINT Sale_FK1 FOREIGN KEY (Retailer_EIK) REFERENCES Retailer (Retailer_EIK),
     CONSTRAINT Sale_FK2 FOREIGN KEY (Item_ID) REFERENCES Inventory (Item_ID)
-)
+);
+
+
+--UPDATE TABLE Lot 
+--DROP TABLE Lot;
+
+
+--Creating a table Suspicious 
+--created
+CREATE TABLE Suspicious(
+    Retailer_ID NUMBER(15) NOT NULL,
+    Retailer_Type VARCHAR(25) NOT NULL,
+    Retailer_Name VARCHAR(50) NOT NULL,
+    Retailer_EIK VARCHAR(100) UNIQUE NOT NULL,
+    CONSTRAINT Suspicious_PK PRIMARY KEY (Retailer_ID),
+    CONSTRAINT Suspicious_FK FOREIGN KEY (Retailer_EIK) REFERENCES Retailer (Retailer_EIK)
+
+);
+
+--Creating a lot for each new retailer
+--ran successfully
+DECLARE 
+BEGIN 
+    FOR I IN (SELECT Retailer_ID, Retailer_EIK FROM Retailer) LOOP
+    INSERT INTO Lot (Lot_ID, Retailer_EIK, Date_Open, Balance) 
+    VALUES (I.Retailer_ID, I.Retailer_EIK, CURRENT_DATE, 0);
+    END LOOP;
+END;
+
+DECLARE
+BEGIN 
+    SELECT * FROM Retailer 
+    WHERE Retailer_Type = "Individual"
+        
+    
+    
+    
+    
+    
+    
+    
+    
