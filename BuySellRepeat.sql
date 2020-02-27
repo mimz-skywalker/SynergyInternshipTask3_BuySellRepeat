@@ -99,11 +99,76 @@ BEGIN
     END LOOP;
 END;
 
-DECLARE
-BEGIN 
-    SELECT * FROM Retailer 
-    WHERE Retailer_Type = "Individual"
+
+
+--new table to save violations
+CREATE TABLE Violation(
+Violation_ID number(10) NOT NULL,
+Retailer_EIK varchar(100) NOT NULL,
+Retailer_Name varchar(50) NOT NULL,
+CONSTRAINT Violation_PK PRIMARY KEY (Violation_ID),
+CONSTRAINT Violation_FK FOREIGN KEY (Retailer_EIK) REFERENCES Retailer(Retailer_EIK)
+);
+
+
+
+
+--trigger to register new retailers
+CREATE OR REPLACE TRIGGER Regsiter_Retailers
+BEFORE INSERT ON Retailer
+FOR EACH ROW 
+DECLARE 
+    old_type varchar(25);
+    new_id number := NEW.Retailer_Id;
+    new_type varchar(25) := NEW.Retailer_Type;
+    new_name varchar(50) := NEW.Retailer_Name;
+    new_eik varchar(100) := NEW.Retailer_EIK;
+    new_owner varchar(50) := NEW.Retail_Owner;
+    check_type varchar(25);
+BEGIN
+    IF (new_type = 'Individual')
+    THEN
+    {
         
+        old_type :=    (SELECT Retailer_Type FROM Retailer 
+                       WHERE Retailer_EIK = new_eik);
+                      
+        check_type := (SELECT Retailer_Type FROM Retailer 
+                      WHERE Retailer_EIK = new_eik AND new_type = 'Legal');
+        IF(old_type = 'Agriculturalist') 
+        THEN
+        {
+            UPDATE Retailer SET Reitailer_Type = 'AgriculturalistIndividual' WHERE Retailer_EIK = old_type
+        }
+        END IF;
+        IF(check_type IS NOT NULL) 
+        THEN
+        {
+            INSERT INTO Violation VALUES (new_id, new_eik, new_name);
+        }
+        END IF;
+        
+    }
+    ELSIF (NEW.Retailer_Type = 'Legal') 
+    THEN
+    {
+        old_type = (SELECT * FROM Suspicious
+                     WHERE Retailer_EIK = NEW.Retailer_EIK);
+        IF(old_type IS NOT NULL) 
+        THEN
+        {
+            INSERT INTO MaliciuosRetailer VALUES (new_id, new_type, new_name, new_eik, new_owner);
+        }
+        
+        END IF;
+        
+    }
+    END IF;
+END;
+
+INSERT INTO Retailer VALUES (6, 'Individual', 'Poli Ivanova', '32974943', 'Ivan')
+    
+    
     
     
     
