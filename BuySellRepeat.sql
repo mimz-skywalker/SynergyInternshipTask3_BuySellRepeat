@@ -73,9 +73,6 @@ CREATE TABLE Successful_Sale(
 );
 
 
---UPDATE TABLE Lot 
---DROP TABLE Lot;
-
 
 --Creating a table Suspicious 
 --created
@@ -128,45 +125,153 @@ DECLARE
 BEGIN
     IF (new_type = 'Individual')
     THEN
-    {
-        
-        old_type :=    (SELECT Retailer_Type FROM Retailer 
-                       WHERE Retailer_EIK = new_eik);
+        SELECT Retailer_Type FROM Retailer 
+        INTO old_type 
+        WHERE Retailer_EIK = new_eik;
                       
-        check_type := (SELECT Retailer_Type FROM Retailer 
-                      WHERE Retailer_EIK = new_eik AND new_type = 'Legal');
+        SELECT Retailer_Type FROM Retailer 
+        INTO check_type
+        WHERE Retailer_EIK = new_eik AND new_type = 'Legal';
+        
         IF(old_type = 'Agriculturalist') 
         THEN
-        {
-            UPDATE Retailer SET Reitailer_Type = 'AgriculturalistIndividual' WHERE Retailer_EIK = old_type
-        }
+        
+            UPDATE Retailer SET Reitailer_Type = 'AgriculturalistIndividual' WHERE Retailer_EIK = old_type;
+        
         END IF;
         IF(check_type IS NOT NULL) 
         THEN
-        {
-            INSERT INTO Violation VALUES (new_id, new_eik, new_name);
-        }
-        END IF;
         
-    }
+            INSERT INTO Violation VALUES (new_id, new_eik, new_name);
+        
+        END IF;
     ELSIF (NEW.Retailer_Type = 'Legal') 
     THEN
-    {
-        old_type = (SELECT * FROM Suspicious
-                     WHERE Retailer_EIK = NEW.Retailer_EIK);
+    
+        SELECT * FROM Suspicious
+        INTO old_type
+        WHERE Retailer_EIK = NEW.Retailer_EIK;
         IF(old_type IS NOT NULL) 
         THEN
-        {
+        
             INSERT INTO MaliciuosRetailer VALUES (new_id, new_type, new_name, new_eik, new_owner);
-        }
         
         END IF;
-        
-    }
     END IF;
 END;
 
-INSERT INTO Retailer VALUES (6, 'Individual', 'Poli Ivanova', '32974943', 'Ivan')
+INSERT INTO Retailer VALUES (6, 'Individual', 'Poli Ivanova', '32974943', 'Ivan');
+
+
+--trigger when making sales 
+CREATE OR REPLACE TRIGGER Sale
+BEFORE INSERT ON Successful_Sale
+FOR EACH ROW
+DECLARE 
+	quantity_needed NUMBER(10) = NEW.Quantity;
+	sale_id NUMBER(15) = NEW.Sale_ID;
+	eik VARCHAR(100) = NEW.Retailer_EIK;
+	item_id NUMBER(15) = NEW.Item_ID;
+	quantity_check NUMBER(10);
+BEGIN 
+	SELECT Quantity 
+	FROM Inventory
+	INTO quantity_check
+	WHERE Quantity.Retailer_EIK = eik;
+
+	IF (quantity_needed > quantity_check)
+	THEN	
+		INSERT INTO Unsuccessful_Sale VALUES (sale_id, eik, item_id, quantity_needed);
+	ELSE
+		INSERT INTO Successful_Sale VALUES (sale_id, eik, item_id, quantity_needed);
+
+		UPDATE Inventory 
+		SET Quantity = (quantity_check - quantity_needed);
+		WHERE Inventory.Retailer_EIK = eik AND Inventory.Item_ID = item_id;
+	END IF;
+END;
+
+--create table accountancy
+CREATE TABLE Accountancy_Table(
+	Entry_ID NUMBER(15) NOT NULL,
+	Retailer_EIK VARCHAR(100) NOT NULL,
+	Sum_Sale NUMBER(10) NOT NULL,
+	Tax NUMBER(10) NOT NULL,
+	Tax_Date DATE NOT NULL,
+	CONSTRAINT Accountancy_PK PRIMARY KEY (Entry_ID),
+	CONSTRAINT Accountancy_FK FOREIGN KEY (Retailer_EIK) REFERENCES Retailer(Retailer_EIK)
+);
+
+--create table tax free retailers
+CREATE TABLE Tax_Free(
+	Entry_ID NUMBER(15) NOT NULL,
+	Retailer_EIK VARCHAR(100) NOT NULL,
+	CONSTRAINT Tax_Free_PK PRIMARY KEY (Entry_ID),
+	CONSTRAINT Tax_Free_FK FOREIGN KEY (Retailer_EIK) REFERENCES Retaielr(Retailer_EIK)
+);
+
+--accountancy procedure
+DECLARE 
+	sum_sale NUMBER(10) = 0;
+	tax NUMBER(10);
+	check_eik VARCHAR(100);
+BEGIN
+	FOR I IN (SELECT Inv.Retailer_EIK, Inv.Price, S.Quantity, S.Sale_ID, Inv.Update_date, R.Retailer_type
+			  FROM Inventory Inv
+			  INNER JOIN Successful_Sale S
+			  ON Inv.Item_ID = S.Item_ID AND Inv.Retailer_EIK = S.Retailer_EIK
+			  INNER JOIN Retailer R
+			  ON R.Retailer_EIK = S.Retailer_EIK) LOOP
+
+			  sum_sale = I.Price * I.Quantity
+			  
+			  IF(I.Retailer_type = 'Individual')
+			  THEN
+				sum_sale = sum_sale - 2500;
+			  END IF;
+
+			  IF (I.Retailer_type = 'Legal')
+			  THEN 
+				SELECT T.Retailer_EIK FROM Tax_free T INTO check_eik 
+				WHERE I.Retailer_EIK = T.Retailer_EIK;
+
+				IF (check_eik IS NOT NULL) 
+				THEN
+					sum_sale = 0;
+				END IF;
+			   END IF;
+
+			  IF (sum_sale > 0 AND sum_sale < 5000)
+			  THEN 
+				INSERT INTO Accountancy_Table VALUES (I.Sale_ID, I.Retailer_EIK, sum_sale, 0, I.Update_date);
+
+			  ELSIF (sum_sale >= 5000 AND sum_sale < 7500)
+			  THEN
+				INSERT INTO Accountancy_Table VALUES (I.Sale_ID, I.Retailer_EIK, sum_sale, 0.05*sum_sale, I.Update_date);
+
+			  ELSIF (sum_sale >= 7500 AND sum_sale < 10000)
+			  THEN 
+				INSERT INTO Accountancy_Table VALUES (I.Sale_ID, I.Retailer_EIK, sum_sale, 0.07*sum_sale, I.Update_date);
+
+			  ELSE (sum_sale >= 10000)
+			  THEN
+				INSERT INTO Accountancy_Table VALUES (I.Sale_ID, I.Retailer_EIK, sum_sale, 0.1*sum_sale, I.Update_date);
+			  END IF;
+	END LOOP;
+END;
+
+
+CREATE VIEW MontlyReport
+	SELECT T.Retailer_EIK, SUM(T.sum_sale) as Sum_Sales, sum(T.tax) as Sum_Taxes, count(S.sale_ID) as Sales_Count 
+	FROM Accountancy_Table T
+	INNER JOIN Successful_Sale S
+	ON T.Retailer_EIK = S.Retailer_EIK;
+			  
+			
+
+
+	
+
     
     
     
